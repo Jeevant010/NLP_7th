@@ -1,0 +1,1 @@
+Students can use Python to tokenize text, count words, identify sentences, and study word frequencies. Corpus analysis helps researchers understand how language is used in different contexts. Simple statistics such as character count, word count, sentence count, and vocabulary size provide useful information about a text.
