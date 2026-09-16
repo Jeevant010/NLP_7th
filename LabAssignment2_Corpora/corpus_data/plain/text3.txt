@@ -1,0 +1,1 @@
+Machine learning and natural language processing are important areas of computer science. Text classification, part of speech tagging, and information extraction are common language processing tasks. A carefully prepared corpus can be used for experiments, analysis, and evaluation of NLP systems.
