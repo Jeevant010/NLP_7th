@@ -1,0 +1,5 @@
+Speech synthesis converts written text into spoken audio.
+
+A text to speech system first analyses the sentence structure, then it predicts the pronunciation of every word, and finally it generates the audio waveform.
+
+The quality of the generated speech depends on the voice model, the language, and the punctuation present in the text.
