@@ -1,0 +1,1 @@
+Cloud computing provides access to computing resources through a network. Modern applications use databases, servers, and security systems to store and process information. Software developers use programming tools to build reliable and scalable computer systems.
