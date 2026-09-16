@@ -1,0 +1,1 @@
+Natural language processing allows computers to work with human language. It is used for text analysis, translation, search, and speech applications. A corpus is a collection of texts that can be studied using computational methods. Python provides useful libraries for processing and analyzing language data.
