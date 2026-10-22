@@ -58,12 +58,16 @@ Following the development of BAM (BMVC 2018), the authors made two critical obse
 ### Breakthrough 1: Dual Pooling (Average + Max)
 Previous attention modules (including SENet and BAM) relied exclusively on Global Average Pooling to generate channel descriptors.
 
-$$\text{AvgPool}(F) = \frac{1}{HW} \sum_{i=1}^H \sum_{j=1}^W F(c, i, j)$$
+```math
+\text{AvgPool}(F) = \frac{1}{HW} \sum_{i=1}^H \sum_{j=1}^W F(c, i, j)
+```
 
 * **The Limitation of Average Pooling:** Average pooling aggregates spatial extent smoothly, but it acts as a low-pass filter. Small, high-contrast, discriminative features (such as an animal's eye, the sharp tip of a tool, or high-gradient corners) are averaged out across thousands of background pixels.
 * **The Role of Max Pooling:** Max pooling extracts the most prominent, high-intensity activation:
 
-$$\text{MaxPool}(F) = \max_{i, j} F(c, i, j)$$
+```math
+\text{MaxPool}(F) = \max_{i, j} F(c, i, j)
+```
 
 Max pooling identifies whether a feature is strongly active anywhere in the spatial grid, regardless of the area it covers.
 
@@ -74,7 +78,9 @@ CBAM uses **both** Average Pooling and Max Pooling simultaneously, allowing the 
 ### Breakthrough 2: Sequential Ordering (Channel First, Spatial Second)
 In BAM, Channel Attention and Spatial Attention were computed in parallel from the same input tensor $F$ and combined by addition:
 
-$$M(F) = \sigma(M_c(F) + M_s(F))$$
+```math
+M(F) = \sigma(M_c(F) + M_s(F))
+```
 
 The CBAM authors found that structuring the operations **sequentially** is more effective:
 1. **Channel Attention First:** The network determines *which* feature maps contain meaningful semantic categories and suppresses noisy channels.
@@ -86,13 +92,19 @@ The CBAM authors found that structuring the operations **sequentially** is more 
 
 Given an intermediate feature tensor:
 
-$$F \in \mathbb{R}^{C \times H \times W}$$
+```math
+F \in \mathbb{R}^{C \times H \times W}
+```
 
 The entire CBAM process is defined by two sequential matrix operations:
 
-$$F' = M_c(F) \otimes F$$
+```math
+F' = M_c(F) \otimes F
+```
 
-$$F'' = M_s(F') \otimes F'$$
+```math
+F'' = M_s(F') \otimes F'
+```
 
 Where:
 * $M_c(F) \in \mathbb{R}^{C \times 1 \times 1}$ is the 1D channel attention map.
@@ -143,9 +155,13 @@ Where:
 #### Step 1: Spatial Pooling
 The input feature map $F$ is pooled along the spatial dimensions $(H \times W)$ using both average pooling and max pooling:
 
-$$F^c_{avg} = \text{AvgPool}(F) \in \mathbb{R}^{C \times 1 \times 1}$$
+```math
+F^c_{avg} = \text{AvgPool}(F) \in \mathbb{R}^{C \times 1 \times 1}
+```
 
-$$F^c_{max} = \text{MaxPool}(F) \in \mathbb{R}^{C \times 1 \times 1}$$
+```math
+F^c_{max} = \text{MaxPool}(F) \in \mathbb{R}^{C \times 1 \times 1}
+```
 
 #### Step 2: Shared Multi-Layer Perceptron (MLP)
 Both vectors are forwarded through a shared two-layer MLP to minimize parameter overhead:
@@ -156,11 +172,15 @@ Both vectors are forwarded through a shared two-layer MLP to minimize parameter 
 #### Step 3: Fusion and Activation
 The output feature vectors are merged via element-wise addition, followed by a Sigmoid activation:
 
-$$M_c(F) = \sigma\left(\text{MLP}\left(\text{AvgPool}(F)\right) + \text{MLP}\left(\text{MaxPool}(F)\right)\right)$$
+```math
+M_c(F) = \sigma\left(\text{MLP}\left(\text{AvgPool}(F)\right) + \text{MLP}\left(\text{MaxPool}(F)\right)\right)
+```
 
 Expanded mathematically:
 
-$$M_c(F) = \sigma\left(W_1 \cdot \text{ReLU}\left(W_0 \cdot F^c_{avg}\right) + W_1 \cdot \text{ReLU}\left(W_0 \cdot F^c_{max}\right)\right)$$
+```math
+M_c(F) = \sigma\left(W_1 \cdot \text{ReLU}\left(W_0 \cdot F^c_{avg}\right) + W_1 \cdot \text{ReLU}\left(W_0 \cdot F^c_{max}\right)\right)
+```
 
 Where:
 * $W_0 \in \mathbb{R}^{\frac{C}{r} \times C}$
@@ -170,7 +190,9 @@ Where:
 #### Step 4: Channel Recalibration
 The intermediate calibrated tensor $F'$ is computed by scaling:
 
-$$F'_{c, i, j} = M_c(F)_{c, 1, 1} \cdot F_{c, i, j}$$
+```math
+F'_{c, i, j} = M_c(F)_{c, 1, 1} \cdot F_{c, i, j}
+```
 
 ---
 
@@ -214,21 +236,29 @@ Rather than using heavy dilated convolutions (as in BAM), CBAM computes spatial 
 
 1. **Channel Average Pooling:** At each spatial coordinate $(i, j)$, compute the mean value across all channels $C$:
 
-$$F^s_{avg}(i, j) = \frac{1}{C} \sum_{c=1}^C F'_{c}(i, j) \quad \in \mathbb{R}^{1 \times H \times W}$$
+```math
+F^s_{avg}(i, j) = \frac{1}{C} \sum_{c=1}^C F'_{c}(i, j) \quad \in \mathbb{R}^{1 \times H \times W}
+```
 
 2. **Channel Max Pooling:** At each spatial coordinate $(i, j)$, extract the maximum value across all channels $C$:
 
-$$F^s_{max}(i, j) = \max_{c \in \{1, \dots, C\}} F'_{c}(i, j) \quad \in \mathbb{R}^{1 \times H \times W}$$
+```math
+F^s_{max}(i, j) = \max_{c \in \{1, \dots, C\}} F'_{c}(i, j) \quad \in \mathbb{R}^{1 \times H \times W}
+```
 
 #### Step 2: Channel Concatenation
 The two 2D spatial maps are concatenated along the channel axis to create a 2-channel spatial descriptor:
 
-$$F^s_{concat} = \left[ F^s_{avg} \,;\, F^s_{max} \right] \in \mathbb{R}^{2 \times H \times W}$$
+```math
+F^s_{concat} = \left[ F^s_{avg} \,;\, F^s_{max} \right] \in \mathbb{R}^{2 \times H \times W}
+```
 
 #### Step 3: Large-Kernel Spatial Convolution
 A standard 2D convolution layer with a large receptive field kernel ($7 \times 7$) convolves over the 2-channel tensor, reducing it to a single channel:
 
-$$M_s(F') = \sigma\left( f^{7 \times 7}\left( \left[ F^s_{avg} \,;\, F^s_{max} \right] \right) \right)$$
+```math
+M_s(F') = \sigma\left( f^{7 \times 7}\left( \left[ F^s_{avg} \,;\, F^s_{max} \right] \right) \right)
+```
 
 Where:
 * $f^{7 \times 7}$ denotes a 2D convolution with kernel size $7 \times 7$ and padding of 3 (preserving spatial height $H$ and width $W$).
@@ -237,7 +267,9 @@ Where:
 #### Step 4: Final Refinement
 The final output tensor $F''$ is obtained by point-wise scaling:
 
-$$F''_{c, i, j} = M_s(F')_{1, i, j} \cdot F'_{c, i, j}$$
+```math
+F''_{c, i, j} = M_s(F')_{1, i, j} \cdot F'_{c, i, j}
+```
 
 ---
 
@@ -393,11 +425,15 @@ Let $Y^c$ be the raw prediction score for class $c$ before the softmax. For a co
 
 1. Compute the importance weight $\alpha_k^c$ via global average pooling of gradients:
 
-$$\alpha_k^c = \frac{1}{H \times W} \sum_{i=1}^H \sum_{j=1}^W \frac{\partial Y^c}{\partial A_{i, j}^k}$$
+```math
+\alpha_k^c = \frac{1}{H \times W} \sum_{i=1}^H \sum_{j=1}^W \frac{\partial Y^c}{\partial A_{i, j}^k}
+```
 
 2. Compute the Grad-CAM heat map by taking a weighted linear combination of forward activation maps followed by a $\text{ReLU}$:
 
-$$L_{\text{Grad-CAM}}^c = \text{ReLU}\left( \sum_k \alpha_k^c \cdot A^k \right)$$
+```math
+L_{\text{Grad-CAM}}^c = \text{ReLU}\left( \sum_k \alpha_k^c \cdot A^k \right)
+```
 
 ### 7.2 Qualitative Visual Findings
 

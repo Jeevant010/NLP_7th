@@ -10,25 +10,35 @@ The modern era of deep learning in computer vision began with the empirical succ
 
 In a standard convolutional layer, let:
 
-$$X \in \mathbb{R}^{C_{in} \times H \times W}$$
+```math
+X \in \mathbb{R}^{C_{in} \times H \times W}
+```
 
 represent the input tensor, where $C_{in}$ is the number of input channels, $H$ is the spatial height, and $W$ is the spatial width.
 
 Let the layer contain $C_{out}$ distinct convolutional filters parameterized by weights:
 
-$$W \in \mathbb{R}^{C_{out} \times C_{in} \times K_h \times K_w}$$
+```math
+W \in \mathbb{R}^{C_{out} \times C_{in} \times K_h \times K_w}
+```
 
 and bias terms:
 
-$$b \in \mathbb{R}^{C_{out}}$$
+```math
+b \in \mathbb{R}^{C_{out}}
+```
 
 For a spatial kernel of dimensions $K_h \times K_w$ (with centered kernel offsets $u \in [-\lfloor K_h/2 \rfloor, \lfloor K_h/2 \rfloor]$ and $v \in [-\lfloor K_w/2 \rfloor, \lfloor K_w/2 \rfloor]$), the forward response at output channel $k \in \{1, \dots, C_{out}\}$ and spatial coordinate $(i, j)$ is given by the cross-correlation operator:
 
-$$Y_{k, i, j} = \sum_{c=1}^{C_{in}} \sum_{u} \sum_{v} W_{k, c, u, v} \cdot X_{c, \, i+u, \, j+v} + b_k$$
+```math
+Y_{k, i, j} = \sum_{c=1}^{C_{in}} \sum_{u} \sum_{v} W_{k, c, u, v} \cdot X_{c, \, i+u, \, j+v} + b_k
+```
 
 Following the linear projection, a point-wise non-linear activation function $\phi(\cdot)$ (typically the Rectified Linear Unit, $\text{ReLU}(z) = \max(0, z)$) is applied:
 
-$$Z_{k, i, j} = \phi(Y_{k, i, j})$$
+```math
+Z_{k, i, j} = \phi(Y_{k, i, j})
+```
 
 ### 1.2 The Two Inherent Inductive Biases of Convolutions
 
@@ -70,7 +80,9 @@ Before 2015, stacking dozens of layers led to the **degradation problem**: as ne
 
 He et al. (2015) introduced the **Residual Block**:
 
-$$y = \mathcal{F}(x, \{W_i\}) + x$$
+```math
+y = \mathcal{F}(x, \{W_i\}) + x
+```
 
 Where:
 * $x$ is the input tensor to the block.
@@ -79,7 +91,9 @@ Where:
 
 During backpropagation, the gradient of the loss $\mathcal{L}$ with respect to the input of block $l$ is:
 
-$$\frac{\partial \mathcal{L}}{\partial x_l} = \frac{\partial \mathcal{L}}{\partial x_L} \cdot \frac{\partial x_L}{\partial x_l} = \frac{\partial \mathcal{L}}{\partial x_L} \left( I + \frac{\partial}{\partial x_l} \sum_{k=l}^{L-1} \mathcal{F}(x_k, \mathcal{W}_k) \right)$$
+```math
+\frac{\partial \mathcal{L}}{\partial x_l} = \frac{\partial \mathcal{L}}{\partial x_L} \cdot \frac{\partial x_L}{\partial x_l} = \frac{\partial \mathcal{L}}{\partial x_L} \left( I + \frac{\partial}{\partial x_l} \sum_{k=l}^{L-1} \mathcal{F}(x_k, \mathcal{W}_k) \right)
+```
 
 Because of the additive identity term $I$, gradients can flow directly from the final layer $L$ to any early layer $l$ without being attenuated by continuous matrix multiplications, enabling architectures of 50, 101, and 152 layers.
 
@@ -87,7 +101,9 @@ Because of the additive identity term $I$, gradients can flow directly from the 
 
 Zagoruyko and Komodakis (2016) demonstrated that simply increasing network depth had diminishing returns. They parameterized ResNet blocks with a widening factor $k$:
 
-$$C_{wide} = k \cdot C_{base}$$
+```math
+C_{wide} = k \cdot C_{base}
+```
 
 A WideResNet with 28 layers and $k=10$ (WRN-28-10) outperformed a 1000-layer plain ResNet, demonstrating that channel capacity (richness of feature representations per layer) is as fundamental as depth.
 
@@ -95,7 +111,9 @@ A WideResNet with 28 layers and $k=10$ (WRN-28-10) outperformed a 1000-layer pla
 
 Xie et al. (2017) introduced **cardinality**—the size of the set of transformations. Instead of performing a single wide convolution or standard residual block, ResNeXt performs a split-transform-merge operation inspired by Inception modules:
 
-$$\mathcal{F}(x) = \sum_{i=1}^{C_{card}} \mathcal{T}_i(x)$$
+```math
+\mathcal{F}(x) = \sum_{i=1}^{C_{card}} \mathcal{T}_i(x)
+```
 
 Where each $\mathcal{T}_i(x)$ is a low-dimensional bottleneck projection. ResNeXt demonstrated that increasing cardinality is more effective at boosting accuracy than simply increasing depth or width.
 
@@ -105,7 +123,9 @@ Where each $\mathcal{T}_i(x)$ is a low-dimensional bottleneck projection. ResNeX
 
 Despite scaling depth, width, and cardinality, CNNs remained fundamentally feed-forward and static:
 
-$$\text{Output} = \text{CNN}(X; \Theta)$$
+```math
+\text{Output} = \text{CNN}(X; \Theta)
+```
 
 Where the parameter set $\Theta$ is fixed after training. For any two images $X_A$ and $X_B$, the filters applied at layer $l$ are identical, regardless of whether $X_A$ is an isolated object or a crowded, cluttered scene.
 
@@ -180,14 +200,18 @@ The first architecture to successfully operationalize channel-wise dynamic recal
 #### Step 1: The Squeeze Operation $\mathbf{F}_{sq}(\cdot)$
 Spatial information is aggregated across the spatial grid $H \times W$ into a channel descriptor vector $z \in \mathbb{R}^C$. The $c$-th element of $z$ is:
 
-$$z_c = \mathbf{F}_{sq}(u_c) = \frac{1}{H \times W} \sum_{i=1}^H \sum_{j=1}^W u_c(i, j)$$
+```math
+z_c = \mathbf{F}_{sq}(u_c) = \frac{1}{H \times W} \sum_{i=1}^H \sum_{j=1}^W u_c(i, j)
+```
 
 Where $u_c \in \mathbb{R}^{H \times W}$ is the $c$-th channel of input tensor $U$.
 
 #### Step 2: The Excitation Operation $\mathbf{F}_{ex}(\cdot, W)$
 To capture non-linear, non-mutually-exclusive relationships across channels, the vector $z$ is passed through a two-layer bottleneck Multi-Layer Perceptron (MLP):
 
-$$s = \mathbf{F}_{ex}(z, W) = \sigma(g(z, W)) = \sigma\left(W_2 \cdot \delta\left(W_1 \cdot z\right)\right)$$
+```math
+s = \mathbf{F}_{ex}(z, W) = \sigma(g(z, W)) = \sigma\left(W_2 \cdot \delta\left(W_1 \cdot z\right)\right)
+```
 
 Where:
 * $W_1 \in \mathbb{R}^{\frac{C}{r} \times C}$ is a dimensionality-reduction linear layer with reduction ratio $r$ (typically $r = 16$).
@@ -198,7 +222,9 @@ Where:
 #### Step 3: The Recalibration (Scale) Operation $\mathbf{F}_{scale}(\cdot, \cdot)$
 The input feature map is re-scaled by channel weights:
 
-$$\widetilde{X}_c = \mathbf{F}_{scale}(u_c, s_c) = s_c \cdot u_c$$
+```math
+\widetilde{X}_c = \mathbf{F}_{scale}(u_c, s_c) = s_c \cdot u_c
+```
 
 Where $s_c$ is a scalar multiplier applied to the entire 2D matrix $u_c \in \mathbb{R}^{H \times W}$.
 
@@ -206,7 +232,9 @@ Where $s_c$ is a scalar multiplier applied to the entire 2D matrix $u_c \in \mat
 
 During the backward pass of training, the gradient of the loss $\mathcal{L}$ with respect to the pre-scaled feature map element $u_c(i, j)$ is:
 
-$$\frac{\partial \mathcal{L}}{\partial u_c(i, j)} = \frac{\partial \mathcal{L}}{\partial \widetilde{X}_c(i, j)} \cdot s_c + \sum_{m=1}^C \left( \sum_{p=1}^H \sum_{q=1}^W \frac{\partial \mathcal{L}}{\partial \widetilde{X}_m(p, q)} \cdot u_m(p, q) \right) \cdot \frac{\partial s_m}{\partial z_c} \cdot \frac{1}{HW}$$
+```math
+\frac{\partial \mathcal{L}}{\partial u_c(i, j)} = \frac{\partial \mathcal{L}}{\partial \widetilde{X}_c(i, j)} \cdot s_c + \sum_{m=1}^C \left( \sum_{p=1}^H \sum_{q=1}^W \frac{\partial \mathcal{L}}{\partial \widetilde{X}_m(p, q)} \cdot u_m(p, q) \right) \cdot \frac{\partial s_m}{\partial z_c} \cdot \frac{1}{HW}
+```
 
 Notice the two terms:
 1. **The Direct Pathway:** $\frac{\partial \mathcal{L}}{\partial \widetilde{X}_c(i, j)} \cdot s_c$. The gradient is scaled directly by the learned attention weight $s_c$. If $s_c \to 0$ (irrelevant channel), backward gradients for that channel are attenuated.
@@ -222,21 +250,31 @@ While SENet produced strong results on ImageNet, its mathematical design contain
 
 Let $\pi$ be any arbitrary spatial permutation operator that shuffles the pixel coordinates $(i, j)$ across the 2D grid:
 
-$$\pi: \{1, \dots, H\} \times \{1, \dots, W\} \to \{1, \dots, H\} \times \{1, \dots, W\}$$
+```math
+\pi: \{1, \dots, H\} \times \{1, \dots, W\} \to \{1, \dots, H\} \times \{1, \dots, W\}
+```
 
 Let $X^{\pi}$ denote the spatially permuted feature map:
 
-$$X^{\pi}_{c, \, \pi(i, j)} = X_{c, i, j}$$
+```math
+X^{\pi}_{c, \, \pi(i, j)} = X_{c, i, j}
+```
 
 Now evaluate the Squeeze operation on $X^{\pi}$:
 
-$$z_c^{\pi} = \frac{1}{HW} \sum_{i=1}^H \sum_{j=1}^W X^{\pi}_c(i, j) = \frac{1}{HW} \sum_{i=1}^H \sum_{j=1}^W X_c(\pi^{-1}(i, j)) = \frac{1}{HW} \sum_{u=1}^H \sum_{v=1}^W X_c(u, v) = z_c$$
+```math
+z_c^{\pi} = \frac{1}{HW} \sum_{i=1}^H \sum_{j=1}^W X^{\pi}_c(i, j) = \frac{1}{HW} \sum_{i=1}^H \sum_{j=1}^W X_c(\pi^{-1}(i, j)) = \frac{1}{HW} \sum_{u=1}^H \sum_{v=1}^W X_c(u, v) = z_c
+```
 
 Because addition is commutative:
 
-$$z^{\pi} = z \implies s^{\pi} = s$$
+```math
+z^{\pi} = z \implies s^{\pi} = s
+```
 
-$$\text{SENet computes the exact same attention weight vector } s \text{ for a coherent image and a randomly scrambled image.}$$
+```math
+\text{SENet computes the exact same attention weight vector } s \text{ for a coherent image and a randomly scrambled image.}
+```
 
 ```
    [ Coherent Feature Map ]              [ Scrambled Feature Map ]
@@ -262,7 +300,9 @@ Consider an image where an object of interest covers a compact region of $10 \ti
 * The remaining $99\%$ consists of background pixels.
 * The global average:
 
-$$z_c = \frac{1}{10000} \left( \sum_{\text{object}} X_c(i, j) + \sum_{\text{background}} X_c(i, j) \right)$$
+```math
+z_c = \frac{1}{10000} \left( \sum_{\text{object}} X_c(i, j) + \sum_{\text{background}} X_c(i, j) \right)
+```
 
 The informative features from the object are diluted by the background summation. SENet cannot selectively emphasize *where* to sample before computing channel salience, nor can it use channel salience to spatially segment the object.
 
@@ -274,15 +314,21 @@ In early 2018, researchers at KAIST formulated the general **Dual Attention Prob
 
 > Given an arbitrary intermediate convolutional feature representation:
 > 
-> $$F \in \mathbb{R}^{C \times H \times W}$$
+> ```math
+F \in \mathbb{R}^{C \times H \times W}
+```
 > 
 > Can we construct an end-to-end, differentiable mapping that infers a 3D attention tensor:
 > 
-> $$M(F) \in \mathbb{R}^{C \times H \times W}$$
+> ```math
+M(F) \in \mathbb{R}^{C \times H \times W}
+```
 > 
 > such that the refined feature map:
 > 
-> $$F' = \Phi(F, M(F))$$
+> ```math
+F' = \Phi(F, M(F))
+```
 > 
 > simultaneously emphasizes informative channels ("What") and highlights informative spatial locations ("Where"), while adding negligible parameter and computational overhead?
 
@@ -292,11 +338,15 @@ Directly learning a full 3D attention tensor $M(F) \in \mathbb{R}^{C \times H \t
 
 If a fully connected layer or standard 3D convolution were used to map:
 
-$$\mathbb{R}^{C \times H \times W} \to \mathbb{R}^{C \times H \times W}$$
+```math
+\mathbb{R}^{C \times H \times W} \to \mathbb{R}^{C \times H \times W}
+```
 
 The parameter complexity would scale as:
 
-$$\mathcal{O}(C^2 \cdot H^2 \cdot W^2)$$
+```math
+\mathcal{O}(C^2 \cdot H^2 \cdot W^2)
+```
 
 For a standard ResNet stage with $C = 512, H = 28, W = 28$:
 * Input dimensions: $512 \times 28 \times 28 = 401,408$ elements.
@@ -324,12 +374,18 @@ To make 3D attention computationally viable, the 3D attention distribution must 
 
 1. **Parallel Factorization:** Compute a 1D Channel map $M_c(F) \in \mathbb{R}^{C \times 1 \times 1}$ and a 2D Spatial map $M_s(F) \in \mathbb{R}^{1 \times H \times W}$ along independent, concurrent pathways, then sum them:
 
-$$M(F) = \sigma\left(\text{Expand}(M_c(F)) + \text{Expand}(M_s(F))\right)$$
+```math
+M(F) = \sigma\left(\text{Expand}(M_c(F)) + \text{Expand}(M_s(F))\right)
+```
 
 2. **Sequential Factorization:** Apply a two-stage cascade where one attention dimension is computed and applied first, followed by the second dimension:
 
-$$F' = M_c(F) \otimes F$$
+```math
+F' = M_c(F) \otimes F
+```
 
-$$F'' = M_s(F') \otimes F'$$
+```math
+F'' = M_s(F') \otimes F'
+```
 
 The investigation of these two factorization schemes formed the basis of **BAM** and **CBAM**.

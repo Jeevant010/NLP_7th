@@ -53,17 +53,23 @@ The BAM authors argued:
 
 Let:
 
-$$F \in \mathbb{R}^{C \times H \times W}$$
+```math
+F \in \mathbb{R}^{C \times H \times W}
+```
 
 be an intermediate feature map extracted at a bottleneck of a convolutional neural network, where $C$ is the channel depth, $H$ is spatial height, and $W$ is spatial width.
 
 BAM infers a 3D attention map:
 
-$$M(F) \in \mathbb{R}^{C \times H \times W}$$
+```math
+M(F) \in \mathbb{R}^{C \times H \times W}
+```
 
 The refined feature map $F'$ is obtained through **residual scaling**:
 
-$$F' = F + F \odot M(F)$$
+```math
+F' = F + F \odot M(F)
+```
 
 Where $\odot$ denotes element-wise multiplication.
 
@@ -118,11 +124,15 @@ Where $\odot$ denotes element-wise multiplication.
 
 Notice the mathematical structure of $F' = F + F \odot M(F)$:
 
-$$\frac{\partial F'}{\partial F} = I + M(F) + F \odot \frac{\partial M(F)}{\partial F}$$
+```math
+\frac{\partial F'}{\partial F} = I + M(F) + F \odot \frac{\partial M(F)}{\partial F}
+```
 
 If the attention module initializes near zero ($M(F) \to 0$):
 
-$$\frac{\partial F'}{\partial F} \approx I$$
+```math
+\frac{\partial F'}{\partial F} \approx I
+```
 
 This formulation provides two distinct properties:
 1. **Performance Preservation:** The model cannot perform worse than the baseline network because the identity path $F$ is preserved.
@@ -141,7 +151,9 @@ The objective of the channel branch is to compute a scalar weight for each chann
 #### Step 1: Spatial Squeeze
 Spatial dimensions are collapsed using Global Average Pooling:
 
-$$F_c = \text{AvgPool}(F) = \frac{1}{H \times W} \sum_{i=1}^H \sum_{j=1}^W F(c, i, j) \quad \in \mathbb{R}^{C \times 1 \times 1}$$
+```math
+F_c = \text{AvgPool}(F) = \frac{1}{H \times W} \sum_{i=1}^H \sum_{j=1}^W F(c, i, j) \quad \in \mathbb{R}^{C \times 1 \times 1}
+```
 
 This vector softly encodes the global spatial distribution of each feature channel.
 
@@ -155,7 +167,9 @@ To learn inter-channel relationships while controlling parameter overhead, $F_c$
 #### Step 3: Batch Normalization for Scale Alignment
 A critical detail in BAM is the application of **Batch Normalization (BN)** directly after the second linear projection:
 
-$$M_c(F) = \text{BN}\left( W_1 \left( W_0 \cdot \text{AvgPool}(F) + b_0 \right) + b_1 \right)$$
+```math
+M_c(F) = \text{BN}\left( W_1 \left( W_0 \cdot \text{AvgPool}(F) + b_0 \right) + b_1 \right)
+```
 
 Where:
 * $W_0 \in \mathbb{R}^{\frac{C}{r} \times C}$
@@ -172,7 +186,9 @@ Because the channel branch and spatial branch will be added together, their nume
 
 The objective of the spatial branch is to generate a 2D spatial weight map:
 
-$$M_s(F) \in \mathbb{R}^{1 \times H \times W}$$
+```math
+M_s(F) \in \mathbb{R}^{1 \times H \times W}
+```
 
 that emphasizes salient spatial locations and suppresses background noise.
 
@@ -183,7 +199,9 @@ BAM employs **dilated convolutions** to exponentially expand the receptive field
 
 For a 2D input $x$ and a filter $w$, a dilated convolution with dilation factor $d$ is defined as:
 
-$$y[i, j] = \sum_{u=-K}^K \sum_{v=-K}^K x[i + d \cdot u, \, j + d \cdot v] \cdot w[u, v]$$
+```math
+y[i, j] = \sum_{u=-K}^K \sum_{v=-K}^K x[i + d \cdot u, \, j + d \cdot v] \cdot w[u, v]
+```
 
 When $d = 1$, this reduces to a standard convolution. When $d > 1$, the kernel samples input pixels with a stride of $d$, inserting "holes" between filter taps.
 
@@ -192,38 +210,54 @@ Let $RF_{k}$ denote the receptive field of layer $k$, with kernel size $K = 3$ a
 
 1. The effective kernel size $K'$ of a dilated filter is:
 
-$$K' = K + (K - 1)(d - 1) = 3 + (3 - 1)(4 - 1) = 3 + 6 = 9$$
+```math
+K' = K + (K - 1)(d - 1) = 3 + (3 - 1)(4 - 1) = 3 + 6 = 9
+```
 
 2. After the first dilated convolution ($k=1$):
 
-$$RF_1 = 9 \times 9$$
+```math
+RF_1 = 9 \times 9
+```
 
 3. After the second dilated convolution ($k=2$):
 
-$$RF_2 = RF_1 + (K' - 1) = 9 + (9 - 1) = 17 \times 17$$
+```math
+RF_2 = RF_1 + (K' - 1) = 9 + (9 - 1) = 17 \times 17
+```
 
 By cascading two $3 \times 3$ convolutions with $d = 4$, BAM covers a spatial window of **$17 \times 17$ pixels** at each point.
 
 #### Step-by-Step Spatial Pathway
 1. **Channel Compression ($1 \times 1$ Conv):** Squeezes channel dimension from $C \to \frac{C}{r}$ to reduce computational cost:
 
-$$X_0 = f_0^{1 \times 1}(F) \quad \in \mathbb{R}^{\frac{C}{r} \times H \times W}$$
+```math
+X_0 = f_0^{1 \times 1}(F) \quad \in \mathbb{R}^{\frac{C}{r} \times H \times W}
+```
 
 2. **First Dilated Convolution ($3 \times 3, d = 4$):** Aggregates local and semi-global context:
 
-$$X_1 = f_1^{3 \times 3, d=4}(X_0) \quad \in \mathbb{R}^{\frac{C}{r} \times H \times W}$$
+```math
+X_1 = f_1^{3 \times 3, d=4}(X_0) \quad \in \mathbb{R}^{\frac{C}{r} \times H \times W}
+```
 
 3. **Second Dilated Convolution ($3 \times 3, d = 4$):** Expands the receptive field to $17 \times 17$:
 
-$$X_2 = f_2^{3 \times 3, d=4}(X_1) \quad \in \mathbb{R}^{\frac{C}{r} \times H \times W}$$
+```math
+X_2 = f_2^{3 \times 3, d=4}(X_1) \quad \in \mathbb{R}^{\frac{C}{r} \times H \times W}
+```
 
 4. **Spatial Projection ($1 \times 1$ Conv):** Squeezes the channel dimension from $\frac{C}{r} \to 1$:
 
-$$X_3 = f_3^{1 \times 1}(X_2) \quad \in \mathbb{R}^{1 \times H \times W}$$
+```math
+X_3 = f_3^{1 \times 1}(X_2) \quad \in \mathbb{R}^{1 \times H \times W}
+```
 
 5. **Batch Normalization:**
 
-$$M_s(F) = \text{BN}(X_3) = \text{BN}\left( f_3^{1 \times 1}\left( f_2^{3 \times 3, d=4}\left( f_1^{3 \times 3, d=4}\left( f_0^{1 \times 1}(F) \right) \right) \right) \right)$$
+```math
+M_s(F) = \text{BN}(X_3) = \text{BN}\left( f_3^{1 \times 1}\left( f_2^{3 \times 3, d=4}\left( f_1^{3 \times 3, d=4}\left( f_0^{1 \times 1}(F) \right) \right) \right) \right)
+```
 
 ---
 
@@ -235,17 +269,25 @@ With:
 
 Both tensors are broadcast (tiled) to the full dimensions of $\mathbb{R}^{C \times H \times W}$:
 
-$$\text{Expand}(M_c(F))_{c, i, j} = M_c(F)_{c, 1, 1}$$
+```math
+\text{Expand}(M_c(F))_{c, i, j} = M_c(F)_{c, 1, 1}
+```
 
-$$\text{Expand}(M_s(F))_{c, i, j} = M_s(F)_{1, i, j}$$
+```math
+\text{Expand}(M_s(F))_{c, i, j} = M_s(F)_{1, i, j}
+```
 
 The broadcast tensors are combined via **element-wise addition**, and a Sigmoid activation produces the final 3D attention map:
 
-$$M(F) = \sigma\left( \text{Expand}(M_c(F)) + \text{Expand}(M_s(F)) \right)$$
+```math
+M(F) = \sigma\left( \text{Expand}(M_c(F)) + \text{Expand}(M_s(F)) \right)
+```
 
 Where:
 
-$$\sigma(z) = \frac{1}{1 + e^{-z}}$$
+```math
+\sigma(z) = \frac{1}{1 + e^{-z}}
+```
 
 Every point $M(F)_{c, i, j} \in (0, 1)$ represents the joint probability of relevance for channel $c$ at pixel coordinate $(i, j)$.
 
@@ -298,7 +340,9 @@ The authors investigated whether both branches were necessary and compared diffe
 
 #### Why Element-Wise Summation Outperformed Product and Max:
 1. **Summation:** In the forward pass, summation merges complementary information from both pathways without suppression. In the backward pass, gradients are distributed equally:
-   $$\frac{\partial (M_c + M_s)}{\partial M_c} = 1, \quad \frac{\partial (M_c + M_s)}{\partial M_s} = 1$$
+   ```math
+\frac{\partial (M_c + M_s)}{\partial M_c} = 1, \quad \frac{\partial (M_c + M_s)}{\partial M_s} = 1
+```
 2. **Product ($M_c \cdot M_s$):** Multiplication couples gradients ($\frac{\partial (M_c M_s)}{\partial M_c} = M_s$). If one branch produces a small value, the gradient flowing through the other branch is suppressed, making optimization unstable.
 3. **Maximum ($\max(M_c, M_s)$):** The max operator routes gradients exclusively to the higher-value branch, starving the other branch of training signal.
 
