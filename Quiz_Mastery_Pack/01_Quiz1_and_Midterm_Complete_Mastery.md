@@ -4,22 +4,8 @@
 
 ---
 
-## 1. Exam Psychology & The "Un-Ticked Paper" Fallacy
 
-> [!CAUTION]
-> ### Why You Missed Marks in the Last Quiz
-> **Cognitive Completion Trap**: When you solve a difficult question on rough paper or in your head, your brain experiences the "Eureka!" dopamine release and marks the task as *complete*. In the rush to tackle the next question, your hand forgets to **actually tick or bubble the option on the main question/answer sheet**!
->
-> ### The 3 Non-Negotiable Rules for Full Marks:
-> 1. **Immediate Execution**: You are **never done** with a question when you solve it on scratch paper. A question is ONLY done when the pen marks the option on the submission sheet.
-> 2. **Finger-Track & Number-Lock**: Before reading question $N+1$, touch your pen tip to option $(A)/(B)/(C)/(D)$ on row $N$ of your answer sheet.
-> 3. **The 3-Minute Audit Sweep**: Reserve 3 minutes before the end of the 20-minute quiz. Count your ticked items:
->    $$\text{Ticked Items} \equiv \text{Total Questions (e.g., 6/6 or 10/10)}$$
->    Never leave an exam hall without this check.
-
----
-
-## 2. QUIZ 1 (CS-702: B.Tech) — Detailed Question Analysis
+## 1. QUIZ 1 (CS-702: B.Tech) — Detailed Question Analysis
 
 ### Question 1: Bayesian Spelling Correction Noisy Channel Denominator
 * **Question Statement**: When applying the Noisy Channel Model for Bayesian spelling correction, we seek to find candidate word $c$ that maximizes $P(c|w)$. Given Bayes' theorem:
@@ -95,7 +81,7 @@
 
 ---
 
-## 3. QUIZ 1 (CS-913: M.Tech) — Key Variations & Gotchas
+## 2. QUIZ 1 (CS-913: M.Tech) — Key Variations & Gotchas
 
 1. **Trigram Markov Assumption**:
    $$P(w_n | w_1, \dots, w_{n-1}) \approx P(w_n | w_{n-2}, w_{n-1})$$
@@ -114,7 +100,7 @@
 
 ---
 
-## 4. Mid-Semester Paper Numerical Calculations (Step-by-Step)
+## 3. Mid-Semester Paper Numerical Calculations (Step-by-Step)
 
 ### Problem 1: Bigram Language Model Probability & Laplace Smoothing
 Given Corpus:
