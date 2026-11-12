@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CS743 Assignment 3 — Complete Solutions</title>
+<style>
+  :root { --fg:#1f2328; --mut:#57606a; --bg:#ffffff; --panel:#f6f8fa; --line:#d0d7de; --accent:#0b5cad; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; padding: 28px 20px 64px;
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px; line-height: 1.65;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 .35em; }
+  h2 { font-size: 1.42rem; line-height: 1.3; margin: 1.8em 0 .5em; padding-bottom: .3em; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 1.14rem; line-height: 1.35; margin: 1.5em 0 .4em; color: var(--accent); }
+  h4 { font-size: 1.02rem; margin: 1.2em 0 .3em; }
+  p { margin: .65em 0; }
+  strong { font-weight: 600; }
+  ul, ol { margin: .6em 0; padding-left: 1.5em; }
+  li { margin: .35em 0; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 2em 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: .88em; background: var(--panel); padding: .12em .35em; border-radius: 4px;
+    overflow-wrap: anywhere;
+  }
+  pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; margin: 1em 0; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none; padding: 0; font-size: 13.5px; white-space: pre;
+    overflow-wrap: normal;
+  }
+  @media (max-width: 600px) {
+    body { padding: 18px 13px 48px; font-size: 15px; }
+    h1 { font-size: 1.5rem; }
+    h2 { font-size: 1.25rem; }
+    h3 { font-size: 1.08rem; }
+    pre { padding: 11px 12px; border-radius: 6px; }
+    pre code { font-size: 12px; }
+    ul, ol { padding-left: 1.2em; }
+  }
+  @media print {
+    body { padding: 0; font-size: 11pt; }
+    pre { white-space: pre-wrap; overflow: visible; }
+    h1, h2, h3 { break-after: avoid; }
+    pre, li, p { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main>
+<h1>CS743 Deep Learning — Assignment 3</h1>
+<h2>Complete Solutions + Full Study Guide</h2>
+<h3>Convolution, Cross-Correlation, Padding, Stride, Locality, Weight Sharing, Receptive Fields, Equivariance, Pooling</h3>
+<p>This document is written in plain text maths (no LaTeX), so it renders correctly in any Markdown viewer, on PC or mobile. Matrices and calculations are in fixed-width blocks. All numerical answers were independently re-computed and checked.</p>
+<p><strong>How to use:</strong> read Part 1 first (it gives you the reasoning), then match your answers against Part 2 question by question. For each question the working is shown, not just the final number, because that is what earns marks.</p>
+<hr>
+<h1>Part 1 — The Core Theory (learn this once, use it everywhere)</h1>
+<h2>1.1 Cross-correlation vs. mathematical convolution</h2>
+<p>Cross-correlation slides the filter over the input in the SAME order and takes an inner product:</p>
+<pre><code>
+y_i = sum over j of  k_j * x_(i+j-1)          j = 1..K
+</code></pre>
+<p>Mathematical convolution reverses the filter first:</p>
+<pre><code>
+conv(x, k) = cross_correlation(x, reverse(k))
+</code></pre>
+<p>So a 1-D filter <code>k = (k1, k2, k3)</code> becomes <code>(k3, k2, k1)</code> for convolution.</p>
+<p>Important: deep-learning libraries (<code>Conv1d</code>, <code>Conv2d</code>) actually compute cross-correlation. That is why a learned layer is still called a "convolution".</p>
+<p>Key facts:</p>
+<ul>
+<li>Correlation and convolution give the SAME result only if the filter is symmetric under</li>
+</ul>
+<p>reversal, <code>k_j = k_(K+1-j)</code> (for example <code>(a, b, a)</code>, or a length-1 filter).</p>
+<ul>
+<li>For learned filters, the flip is just a relabelling of the parameters: if the optimal</li>
+</ul>
+<p>correlation filter is k, the optimal convolution filter is reverse(k). The model's power   is unchanged. The distinction still matters for hand computations and for interpretation.</p>
+<h2>1.2 Output size (valid / same, with stride and padding)</h2>
+<p>One dimension:</p>
+<pre><code>
+m = floor( (n + 2p - k) / s ) + 1
+</code></pre>
+<p>Two dimensions: apply the same formula separately to height and width.</p>
+<pre><code>
+H_out = floor( (H + 2p_h - k_h) / s_h ) + 1
+W_out = floor( (W + 2p_w - k_w) / s_w ) + 1
+</code></pre>
+<ul>
+<li>Valid: p = 0.</li>
+<li>Same padding: choose p so output size equals input size. With stride 1, p = (k-1)/2</li>
+</ul>
+<p>(needs odd k).</p>
+<ul>
+<li>Stride s: filter jumps s pixels per step. s &gt; 1 downsamples.</li>
+<li>Padding p adds 2p to the length; padded length = n + 2p.</li>
+<li>floor is used because an incomplete final window is discarded.</li>
+</ul>
+<h2>1.3 Convolution as a local inner product (pattern matching)</h2>
+<p>At output location (i, j) the layer takes the local patch P(i,j) of the image and computes</p>
+<pre><code>
+Y(i,j) = &lt; P(i,j), K &gt;  = sum over (a,b) of  K(a,b) * X(i+a-1, j+b-1)
+</code></pre>
+<ul>
+<li>A large response means the patch "looks like" the filter.</li>
+<li>A constant patch of value c gives response c * (sum of filter coefficients).</li>
+<li>If the filter coefficients sum to zero, constant/brightness-only regions give response 0.</li>
+</ul>
+<p>Such a filter responds to local CHANGE (edges, gradients), not to brightness.</p>
+<h2>1.4 Locality, weight sharing, parameters, receptive field</h2>
+<ul>
+<li>Local connectivity: each output unit reads only a k x k neighbourhood.</li>
+<li>Weight sharing: the same filter is used at every spatial position.</li>
+<li>Parameters depend on k and channel counts, never on H or W.</li>
+<li>Receptive field (RF): the region of the original input a unit depends on.</li>
+</ul>
+<p>For L stacked stride-1 k x k convolutions:</p>
+<pre><code>
+RF = 1 + L * (k - 1)          for k = 3:  RF = 2L + 1
+</code></pre>
+<p>So L = 1, 2, 3 gives RF = 3, 5, 7. Growth is LINEAR in depth.</p>
+<ul>
+<li>Stacking local operations therefore builds large-context features from small local ones</li>
+</ul>
+<p>(edges -&gt; parts -&gt; objects), while parameter count stays independent of image size.</p>
+<h2>1.5 Master parameter formula (multi-channel)</h2>
+<p>For input H x W x C_in, filter k x k, output channels C_out:</p>
+<pre><code>
+params = k^2 * C_in * C_out  +  C_out
+       = C_out * ( k^2 * C_in + 1 )
+</code></pre>
+<ul>
+<li>One output channel uses one k x k x C_in filter: k^2 * C_in weights.</li>
+<li>C_out such filters: k^2 * C_in * C_out weights.</li>
+<li>One bias per output channel: C_out.</li>
+<li>H and W do NOT appear. That is the entire advantage of weight sharing.</li>
+</ul>
+<h2>1.6 Computational cost</h2>
+<p>Valid correlation of H x W with a k x k filter:</p>
+<pre><code>
+multiplications per output = k^2
+number of outputs          = (H-k+1)(W-k+1)
+total                      = k^2 (H-k+1)(W-k+1)  ~  k^2 * H * W
+</code></pre>
+<p>A dense (fully connected) map with N = H*W inputs and N outputs costs N^2.</p>
+<pre><code>
+ratio dense/conv ~ N^2 / (k^2 N) = N / k^2
+</code></pre>
+<p>Locality saves COMPUTE (per output is constant). Sharing saves PARAMETERS (independent of N). These are two different savings; do not mix them up.</p>
+<h2>1.7 Equivariance vs. invariance (most common trap)</h2>
+<p>Let T_d be translation by d: <code>(T_d x)_i = x_(i-d)</code>.</p>
+<pre><code>
+Equivariance:  F(T_d x) = T_d F(x)      output MOVES with the input
+Invariance:    F(T_d x) = F(x)          output is UNCHANGED
+</code></pre>
+<p>A stride-1 convolution is EQUIVARIANT, not invariant.</p>
+<p>Proof template (used in Q18, Q21):</p>
+<pre><code>
+(F(x))_i      = sum_j k_j * x_(i+j-1)
+(F(Tx))_i     = sum_j k_j * (Tx)_(i+j-1)
+              = sum_j k_j * x_(i+j-2)
+              = sum_j k_j * x_((i-1)+j-1)
+              = (F(x))_(i-1)
+              = (T F(x))_i
+</code></pre>
+<p>Hence F(Tx) = T F(x). The reason it works: the SAME weights k_j are applied at every position (weight sharing), so shifting the input is absorbed by shifting the summation index.</p>
+<p>Caveats:</p>
+<ul>
+<li>Finite image: shifting moves content out of one side and padding in on the other, so exact</li>
+</ul>
+<p>equivariance fails NEAR THE BOUNDARY. It holds in the interior ("ignoring boundary effects").</p>
+<ul>
+<li>Stride s &gt; 1: the output is sampled on a grid of spacing s. A 1-pixel shift need not become</li>
+</ul>
+<p>a 1-output shift, so exact equivariance breaks (aliasing). Shifts by multiples of s are fine.</p>
+<ul>
+<li>Pointwise (elementwise) nonlinearities preserve equivariance:</li>
+</ul>
+<p><code>sigma(T z) = T sigma(z)</code>, so ReLU/sigmoid/tanh do not break it.</p>
+<h2>1.8 Pooling</h2>
+<ul>
+<li>Max pooling: takes the maximum in each window -&gt; strongest activation, local shift tolerance.</li>
+<li>Average pooling: takes the mean -&gt; overall activation level, smoother.</li>
+<li>Both have ZERO trainable parameters.</li>
+<li>Output size (no padding): floor((n - k)/s) + 1. A 2x2, stride-2 pool halves each side.</li>
+<li>Pooling is many-to-one: it destroys exact position information. It is NOT exactly</li>
+</ul>
+<p>translation equivariant to 1-pixel shifts; it gives only LOCAL, approximate insensitivity.</p>
+<h2>1.9 Ten mistakes that cost marks</h2>
+<ol>
+<li>Wrong indexing: the assignment uses x_(i+j-1), so the first window starts at x_1.</li>
+<li>Forgetting to flip the filter when convolution (not correlation) is asked.</li>
+<li>Using n-k instead of n-k+1 for the valid output length.</li>
+<li>Wrong padding arithmetic: padded length is n + 2p, and k is subtracted once.</li>
+<li>Using ceiling instead of floor for stride.</li>
+<li>Confusing weights with biases: one bias per OUTPUT CHANNEL.</li>
+<li>Putting H or W into a convolutional parameter count. They never appear.</li>
+<li>Saying pooling has trainable parameters. It has zero.</li>
+<li>Saying equivariance means "unchanged". That is invariance.</li>
+<li>Claiming receptive field grows exponentially. For stride-1 stacks it grows linearly, 2L+1.</li>
+</ol>
+<hr>
+<h1>Part 2 — Solutions to All 38 Questions</h1>
+<h2>Question 1 — 1-D valid cross-correlation</h2>
+<p>Given:</p>
+<pre><code>
+x = (2, 1, 3, 0, 4)
+k = (1, -1, 2)
+y_i = k1*x_i + k2*x_(i+1) + k3*x_(i+2)
+</code></pre>
+<p><strong>(a) Number of outputs:</strong> n - k + 1 = 5 - 3 + 1 = 3.</p>
+<p><strong>(b) y1</strong> — window (x1, x2, x3) = (2, 1, 3):</p>
+<pre><code>
+y1 = 1*2 + (-1)*1 + 2*3 = 2 - 1 + 6 = 7
+</code></pre>
+<p><strong>(c) y2</strong> — window (x2, x3, x4) = (1, 3, 0):</p>
+<pre><code>
+y2 = 1*1 + (-1)*3 + 2*0 = 1 - 3 + 0 = -2
+</code></pre>
+<p><strong>(d) Complete output.</strong> y3 uses (x3, x4, x5) = (3, 0, 4):</p>
+<pre><code>
+y3 = 1*3 + (-1)*0 + 2*4 = 3 - 0 + 8 = 11
+y  = (7, -2, 11)
+</code></pre>
+<p><strong>(e) Entries used for y3:</strong> x3 = 3, x4 = 0, x5 = 4.</p>
+<p><strong>(f) Why "local":</strong> every output depends on only 3 adjacent inputs, not the whole vector. As i increases by 1, the window slides by 1. The computation touches a bounded neighbourhood.</p>
+<p>Note: using x_(i+j) instead of x_(i+j-1) would start at x2 and give wrong numbers.</p>
+<hr>
+<h2>Question 2 — Convolution vs. cross-correlation</h2>
+<p>Given:</p>
+<pre><code>
+x = (1, 2, 0, -1, 3)
+k = (2, 1, -1)
+</code></pre>
+<p><strong>(a) Reversed filter:</strong> <code>reverse(k) = (-1, 1, 2)</code>.</p>
+<p><strong>(b) Valid cross-correlation of x with k:</strong></p>
+<pre><code>
+y1 = 2*1 + 1*2 + (-1)*0      = 2 + 2 + 0  = 4
+y2 = 2*2 + 1*0 + (-1)*(-1)   = 4 + 0 + 1  = 5
+y3 = 2*0 + 1*(-1) + (-1)*3   = 0 - 1 - 3  = -4
+y_corr = (4, 5, -4)
+</code></pre>
+<p><strong>(c) Valid convolution</strong> = cross-correlation with reverse(k) = (-1, 1, 2):</p>
+<pre><code>
+c1 = (-1)*1 + 1*2 + 2*0      = -1 + 2 + 0 = 1
+c2 = (-1)*2 + 1*0 + 2*(-1)   = -2 + 0 - 2 = -4
+c3 = (-1)*0 + 1*(-1) + 2*3   = 0 - 1 + 6  = 5
+y_conv = (1, -4, 5)
+</code></pre>
+<p><strong>(d) Equal?</strong> No. (4, 5, -4) is not (1, -4, 5).</p>
+<p><strong>(e) When are they equal?</strong> When the filter equals its own reversal, k_j = k_(K+1-j) (a palindromic filter such as (a, b, a)), or trivially a length-1 filter.</p>
+<hr>
+<h2>Question 3 — What distinguishes the two operations</h2>
+<p>Given <code>k = (k1, k2, k3)</code>.</p>
+<p><strong>(a) Cross-correlation filter:</strong> <code>(k1, k2, k3)</code> — same order.</p>
+<p><strong>(b) Mathematical-convolution filter:</strong> <code>(k3, k2, k1)</code> — reversed order.</p>
+<p><strong>(c) Precise distinction:</strong></p>
+<pre><code>
+correlation:  y_i = sum_j k_j * x_(i+j-1)     (both indices increase)
+convolution:  y_i = sum_j k_j * x_(i-j+1)     (one increases, one decreases)
+</code></pre>
+<p>Convolution is correlation with a 180-degree-rotated kernel. They are related by a fixed linear reindexing of the kernel, not identical functions of (x, k).</p>
+<p><strong>(d) Why the distinction fades for learned filters:</strong> the flip is a fixed, invertible relabelling of the parameter vector. If the best correlation kernel is k*, the best convolution kernel is reverse(k*), and both represent the same function class. Gradient descent can learn either. So the model's capacity is unchanged; only interpretation and hand-calculation care about the difference.</p>
+<hr>
+<h2>Question 4 — Sliding a length-3 filter over x</h2>
+<p>Given <code>x = (3, 1, 4, 1, 5, 9)</code>, length-3 filter, valid cross-correlation.</p>
+<p><strong>(a) Local patches</strong> (6 - 3 + 1 = 4 windows):</p>
+<pre><code>
+(3, 1, 4), (1, 4, 1), (4, 1, 5), (1, 5, 9)
+</code></pre>
+<p><strong>(b) Same filter used how many times?</strong> 4 times, once per output position.</p>
+<p><strong>(c) Trainable parameters:</strong> 3 coefficients + 1 bias = 4.</p>
+<p><strong>(d) Input length 6 -&gt; 100:</strong> No change in filter parameters (still 4). Only the number of applications grows, from 4 to 98.</p>
+<p><strong>(e) Weight sharing:</strong> the same coefficient values are reused at every position. The filter is not re-parameterised per location. This makes the parameter count independent of input size and produces translation equivariance.</p>
+<hr>
+<h2>Question 5 — 2-D valid cross-correlation</h2>
+<p>Given:</p>
+<pre><code>
+      [ 1  2  0 ]
+X  =  [ 3  1  2 ]
+      [ 0  1  4 ]
+
+      [  1   0 ]
+K  =  [ -1   2 ]
+</code></pre>
+<p><strong>(a) Shape of Y:</strong> H' = 3 - 2 + 1 = 2, W' = 3 - 2 + 1 = 2. So Y is 2 x 2.</p>
+<p><strong>(b) Y11</strong> — patch rows 1-2, cols 1-2:</p>
+<pre><code>
+patch = [ 1  2 ]
+        [ 3  1 ]
+Y11 = 1*1 + 0*2 + (-1)*3 + 2*1 = 1 + 0 - 3 + 2 = 0
+</code></pre>
+<p><strong>(c) Y12</strong> — patch rows 1-2, cols 2-3:</p>
+<pre><code>
+patch = [ 2  0 ]
+        [ 1  2 ]
+Y12 = 1*2 + 0*0 + (-1)*1 + 2*2 = 2 + 0 - 1 + 4 = 5
+</code></pre>
+<p><strong>(d) Y21</strong> — patch rows 2-3, cols 1-2:</p>
+<pre><code>
+patch = [ 3  1 ]
+        [ 0  1 ]
+Y21 = 1*3 + 0*1 + (-1)*0 + 2*1 = 3 + 0 + 0 + 2 = 5
+</code></pre>
+<p><strong>(e) Y22</strong> — patch rows 2-3, cols 2-3:</p>
+<pre><code>
+patch = [ 1  2 ]
+        [ 1  4 ]
+Y22 = 1*1 + 0*2 + (-1)*1 + 2*4 = 1 + 0 - 1 + 8 = 8
+</code></pre>
+<p><strong>(f) Complete output:</strong></p>
+<pre><code>
+      [ 0  5 ]
+Y  =  [ 5  8 ]
+</code></pre>
+<hr>
+<h2>Question 6 — Edge-detecting filter on a block image</h2>
+<p>Given:</p>
+<pre><code>
+      [ 1  1  0  0 ]
+X  =  [ 1  1  0  0 ]
+      [ 0  0  2  2 ]
+      [ 0  0  2  2 ]
+
+      [  1  -1 ]
+K  =  [  1  -1 ]
+</code></pre>
+<p>Output is 3 x 3. For each 2x2 patch, response = (sum of left column) - (sum of right column).</p>
+<p><strong>(a) Valid cross-correlation:</strong></p>
+<pre><code>
+(1,1): [1 1; 1 1]   -&gt; (1+1) - (1+1) = 0
+(1,2): [1 0; 1 0]   -&gt; (1+1) - (0+0) = 2
+(1,3): [0 0; 0 0]   -&gt; 0
+(2,1): [1 1; 0 0]   -&gt; (1+0) - (1+0) = 0
+(2,2): [1 0; 0 2]   -&gt; (1+0) - (0+2) = -1
+(2,3): [0 0; 2 2]   -&gt; (0+2) - (0+2) = 0
+(3,1): [0 0; 0 0]   -&gt; 0
+(3,2): [0 2; 0 2]   -&gt; (0+0) - (2+2) = -4
+(3,3): [2 2; 2 2]   -&gt; (2+2) - (2+2) = 0
+</code></pre>
+<pre><code>
+        [ 0   2   0 ]
+X*K  =  [ 0  -1   0 ]
+        [ 0  -4   0 ]
+</code></pre>
+<p><strong>(b) Large-magnitude locations:</strong> only the middle column is non-zero: (1,2) = +2, (2,2) = -1, (3,2) = -4. Largest magnitude at (3,2).</p>
+<p><strong>(c) What local change it detects:</strong> K is constant down columns but changes across columns, so it computes a horizontal derivative. It responds to VERTICAL edges (left-right intensity change). The sign gives the direction of the change. Uniform regions give zero.</p>
+<p><strong>(d) Local feature detector:</strong> the response is the inner product of a local patch with a fixed template. It is large only where the patch matches the template (here a left-right gradient). The output map tells you WHERE that feature occurred.</p>
+<hr>
+<h2>Question 7 — Deriving the valid output shape</h2>
+<p>Input H x W, filter Kh x Kw, stride 1, no padding.</p>
+<p><strong>(a) Height:</strong> the filter's top row i must satisfy i + Kh - 1 &lt;= H, so i &lt;= H - Kh + 1. Number of valid start rows = H - Kh + 1.</p>
+<p><strong>(b) Width:</strong> similarly W - Kw + 1.</p>
+<p><strong>(c) Output shape:</strong></p>
+<pre><code>
+(H - Kh + 1) x (W - Kw + 1)
+</code></pre>
+<p><strong>(d) 10 x 12 input, 3 x 5 filter:</strong></p>
+<pre><code>
+(10 - 3 + 1) x (12 - 5 + 1) = 8 x 8
+</code></pre>
+<p><strong>(e) 28 x 28 input, 5 x 5 filter:</strong></p>
+<pre><code>
+(28 - 5 + 1) x (28 - 5 + 1) = 24 x 24
+</code></pre>
+<p>Intuition: the filter "eats" K-1 pixels in each direction because it needs full overlap.</p>
+<hr>
+<h2>Question 8 — Padding with a 7 x 7 input, 3 x 3 filter, stride 1</h2>
+<p><strong>(a) No padding:</strong> (7 - 3 + 1) x (7 - 3 + 1) = 5 x 5.</p>
+<p><strong>(b) One row/column of zeros on every side:</strong> padded size = (7 + 2) x (7 + 2) = 9 x 9.</p>
+<p><strong>(c) Resulting output:</strong> (9 - 3 + 1) x (9 - 3 + 1) = 7 x 7.</p>
+<p><strong>(d) Why "same" padding:</strong> p = (k-1)/2 = 1 and stride 1 give H_out = H + 2p - k + 1 = 7 + 2 - 3 + 1 = 7 = H. Output size equals input size.</p>
+<p><strong>(e) Why padding helps at boundaries:</strong> without padding, border pixels appear in fewer filter windows (corners in only one), so border information is under-used, the output shrinks, and behaviour changes abruptly at the edge. Padding centres the filter on border pixels, keeps the spatial size, and treats edges more uniformly.</p>
+<hr>
+<h2>Question 9 — 1-D output lengths</h2>
+<p>Formula: m = floor((n + 2p - k)/s) + 1.</p>
+<p><strong>(a)</strong> n=10, k=3, p=0, s=1: (10-3)/1 + 1 = 7 + 1 = 8. <strong>(b)</strong> n=10, k=3, p=1, s=1: (10+2-3)/1 + 1 = 9 + 1 = 10. <strong>(c)</strong> n=10, k=3, p=0, s=2: floor(7/2) + 1 = 3 + 1 = 4. <strong>(d)</strong> n=15, k=5, p=2, s=1: (15+4-5)/1 + 1 = 14 + 1 = 15. <strong>(e)</strong> n=15, k=5, p=2, s=3: floor(14/3) + 1 = 4 + 1 = 5.</p>
+<p>Answers: (a) 8, (b) 10, (c) 4, (d) 15, (e) 5.</p>
+<p>Notes: (b) and (d) are "same" padding (output = input). In (c) the incomplete tail is dropped, which is why floor is used.</p>
+<hr>
+<h2>Question 10 — 32 x 32 input, 5 x 5 filter, padding 2</h2>
+<p>Core quantity: n + 2p - k = 32 + 4 - 5 = 31.</p>
+<p><strong>(a) s = 1:</strong> floor(31/1) + 1 = 32 -&gt; 32 x 32. <strong>(b) s = 2:</strong> floor(31/2) + 1 = 15 + 1 = 16 -&gt; 16 x 16. <strong>(c) s = 4:</strong> floor(31/4) + 1 = 7 + 1 = 8 -&gt; 8 x 8.</p>
+<p><strong>(d) Effect of larger stride:</strong> the filter jumps further between outputs, so the output grid is coarser and spatial resolution decreases (downsampling). Each output summarises a larger region and adjacent outputs are further apart.</p>
+<p><strong>(e) Does stride change filter coefficients?</strong> No. Stride changes WHERE the filter is applied, not WHAT it contains. Parameter count is independent of stride.</p>
+<hr>
+<h2>Question 11 — One 3 x 3 output unit</h2>
+<p><strong>(a)</strong> It depends on 3 x 3 = 9 input locations.</p>
+<p><strong>(b)</strong> A dense neuron on a 100 x 100 image connects to all 10,000 pixels, so it has 10,000 weights (plus bias). The 3x3 unit has 9 (plus bias). About 1111 times fewer connections.</p>
+<p><strong>(c) Local connectivity:</strong> each output unit connects only to a small spatial neighbourhood of the input, not the whole input.</p>
+<p><strong>(d) Why natural for images:</strong> nearby pixels are strongly correlated; edges, corners, textures and blobs are local patterns. A pixel's useful information is mostly in its immediate surroundings, so global connections are wasteful.</p>
+<p><strong>(e) Example:</strong> a vertical or horizontal edge, a corner, a small spot/blob, or a texture patch.</p>
+<hr>
+<h2>Question 12 — Receptive field of stacked 3 x 3 convolutions</h2>
+<p><strong>(a)</strong> A unit in the first output depends on a 3 x 3 region of the original input.</p>
+<p><strong>(b)</strong> A unit in the second output reads a 3 x 3 region of the first output. Each of those units reads a 3 x 3 region of the input. The union per side is 3 + (3 - 1) = 5:</p>
+<pre><code>
+first layer : each unit covers 3 input pixels
+second layer: covers 3 first-layer units per side
+union       : 3 + 3 - 1 = 5  -&gt;  5 x 5 region of the original input
+</code></pre>
+<p>So the answer is 5 x 5.</p>
+<p><strong>(c) After three convolutions:</strong> 1 + 3*(3-1) = 7 -&gt; 7 x 7.</p>
+<p><strong>(d) Formula after L successive 3 x 3 convolutions:</strong> RF = 2L + 1. General k x k, stride 1: RF = 1 + L*(k-1).</p>
+<p><strong>(e) How local operations combine:</strong> each layer takes a local neighbourhood of the previous layer's outputs; composing these nested neighbourhoods enlarges the footprint by k-1 per layer. Depth therefore builds a hierarchy from tiny patterns (edges) to larger structures (parts, objects) while every operation remains local and parameter counts stay independent of image size.</p>
+<p>Common mistake: saying the RF doubles or grows exponentially. It grows linearly.</p>
+<hr>
+<h2>Question 13 — Dense vs. convolutional map on 32 x 32</h2>
+<p>N = 32*32 = 1024 pixels, one scalar output per pixel.</p>
+<p><strong>(a) Weights for one dense output unit:</strong> all 1024 input pixels -&gt; 1024.</p>
+<p><strong>(b) Total dense weights for 32 x 32 outputs:</strong> 1024 * 1024 = 1,048,576.</p>
+<p><strong>(c) Shared 3 x 3 filter weights:</strong> 9.</p>
+<p><strong>(d) Including one bias each:</strong></p>
+<pre><code>
+dense: (1024 weights + 1 bias) * 1024 units = 1,049,600
+conv : 9 weights + 1 bias = 10
+</code></pre>
+<p><strong>(e) Factor fewer (with biases):</strong> 1,049,600 / 10 = 104,960 (about 1.05 x 10^5). Without biases: 1,048,576 / 9 = 116,508.</p>
+<p><strong>(f) The two assumptions:</strong></p>
+<ol>
+<li>Local connectivity: each output uses only a 3x3 neighbourhood, not all 1024 pixels.</li>
+<li>Weight sharing: the same 9 weights are reused at all 1024 positions.</li>
+</ol>
+<hr>
+<h2>Question 14 — Dense map from dimension d to m</h2>
+<p><strong>(a) Weights:</strong> every output connects to every input -&gt; m * d.</p>
+<p><strong>(b) Biases:</strong> one per output -&gt; m.</p>
+<p><strong>(c) Total parameters:</strong> m*d + m = m(d + 1).</p>
+<p><strong>(d) d = 784, m = 784:</strong> 784 * 784 = 614,656 weights (615,440 with biases).</p>
+<p><strong>(e) Single 3 x 3 filter with bias:</strong> 9 + 1 = 10 parameters. Weight ratio: 614,656 / 9 = 68,295. With biases: 615,440 / 10 = 61,544.</p>
+<p><strong>(f) Why conv count does not grow with spatial positions:</strong> a dense map has a separate weight for every (input pixel, output pixel) pair, so its count is O(N^2). A convolution reuses one small filter at every position, so its count is O(k^2) regardless of N. Applications grow with N; parameters do not.</p>
+<hr>
+<h2>Question 15 — Multi-channel filter parameter count</h2>
+<p>Input has C_in channels; one output channel uses a separate k x k kernel for each input channel.</p>
+<p><strong>(a) Weights for one output channel:</strong> k^2 * C_in.</p>
+<p><strong>(b) Including bias:</strong> k^2 * C_in + 1.</p>
+<p><strong>(c) For C_out filters:</strong> C_out * (k^2 * C_in + 1) = k^2 * C_in * C_out + C_out.</p>
+<p><strong>(d) k = 3, C_in = 3, C_out = 16:</strong></p>
+<pre><code>
+9 * 3 * 16 + 16 = 432 + 16 = 448
+</code></pre>
+<p><strong>(e) Depends on image height/width?</strong> No. Only k, C_in, C_out appear.</p>
+<p><strong>(f) Why important:</strong> model size is decoupled from image resolution. The same layer processes 32 x 32 or 4K images with identical parameters, reducing memory, overfitting and training data needs, and it gives translation equivariance.</p>
+<hr>
+<h2>Question 16 — Multiplication count for valid correlation</h2>
+<p>Input H x W, filter k x k.</p>
+<p><strong>(a) Multiplications per output entry:</strong> k^2.</p>
+<p><strong>(b) Number of output entries:</strong> (H - k + 1)(W - k + 1).</p>
+<p><strong>(c) Total multiplications:</strong> k^2 * (H - k + 1)(W - k + 1).</p>
+<p><strong>(d) H = W = 32, k = 3:</strong></p>
+<pre><code>
+9 * (30) * (30) = 8,100
+</code></pre>
+<p><strong>(e) Compare with dense:</strong> a dense map of 30x30 outputs each connected to all 1024 inputs costs 900 * 1024 = 921,600 multiplications; if the output is also 32x32 it is 1024^2 = 1,048,576. So the convolution is roughly 100 times cheaper (8,100 vs about 10^6). Dense cost is O(N^2); conv cost is O(k^2 N).</p>
+<hr>
+<h2>Question 17 — Asymptotic cost, N pixels and N outputs</h2>
+<p><strong>(a) Dense cost:</strong> each of N outputs uses all N inputs -&gt; about N^2 multiplications.</p>
+<p><strong>(b) Conv cost:</strong> each of N outputs uses k^2 inputs -&gt; about N * k^2 multiplications.</p>
+<p><strong>(c) Ratio:</strong> N^2 / (N k^2) = N / k^2.</p>
+<p><strong>(d) N = 10^6, k = 3:</strong> 10^6 / 9 = 111,111 (about 1.11 x 10^5).</p>
+<p><strong>(e) Why the saving is large:</strong> cost per output is constant (k^2), so total cost is LINEAR in the number of pixels, while the dense map is QUADRATIC. The gap N/k^2 grows without bound as images get larger, making dense maps infeasible for megapixel images.</p>
+<hr>
+<h2>Question 18 — Proof that correlation commutes with translation</h2>
+<p>Given (T x)_i = x_(i-1) and (F(x))_i = sum_j k_j * x_(i+j-1).</p>
+<p><strong>(a)</strong> (F(x))_i = sum_j k_j * x_(i+j-1).</p>
+<p><strong>(b)</strong> (F(Tx))_i = sum_j k_j * (Tx)_(i+j-1) = sum_j k_j * x_(i+j-2).</p>
+<p><strong>(c) Rearrange:</strong> let r = i - 1. Then i + j - 2 = r + j - 1, so</p>
+<pre><code>
+(F(Tx))_i = sum_j k_j * x_(r+j-1) = (F(x))_r = (F(x))_(i-1) = (T F(x))_i
+</code></pre>
+<p>Therefore, for all i:</p>
+<pre><code>
+F(T x) = T F(x)
+</code></pre>
+<p><strong>(d) In words:</strong> translating the input by one position produces the same output, merely translated by one position. The filter fires the same way wherever the pattern appears, and the response moves with it.</p>
+<p><strong>(e) Property that makes it possible:</strong> weight sharing plus position-independent local connectivity. The same k_j are applied at every position, so the index shift in the input is absorbed by a shift of the summation index, which is exactly a shift of the output index.</p>
+<p>Boundary caveat: the derivation assumes the shifted signal is defined everywhere. On a finite image the equality holds only away from the edges.</p>
+<hr>
+<h2>Question 19 — Numerical illustration of equivariance</h2>
+<p>Given x = (1, 2, 0, 1, 3, 0), k = (1, -1).</p>
+<p><strong>(a) Original valid correlation</strong> (y_i = x_i - x_(i+1)):</p>
+<pre><code>
+y1 = 1 - 2 = -1
+y2 = 2 - 0 =  2
+y3 = 0 - 1 = -1
+y4 = 1 - 3 = -2
+y5 = 3 - 0 =  3
+y = (-1, 2, -1, -2, 3)
+</code></pre>
+<p><strong>(b) Shift input right by one</strong> (zero fill at front, boundary ignored):</p>
+<pre><code>
+T x = (0, 1, 2, 0, 1, 3)
+</code></pre>
+<p><strong>(c) Correlation of shifted input:</strong></p>
+<pre><code>
+0-1 = -1,  1-2 = -1,  2-0 = 2,  0-1 = -1,  1-3 = -2
+new output = (-1, -1, 2, -1, -2)
+</code></pre>
+<p><strong>(d) Compare:</strong> the original output shifted right by one is</p>
+<pre><code>
+T y = ( ?, -1, 2, -1, -2 )
+</code></pre>
+<p>Ignoring the boundary entry, the new output (-1, 2, -1, -2) matches the shifted original (-1, 2, -1, -2) exactly.</p>
+<p><strong>(e) What it shows:</strong> F(Tx) = T(F(x)) away from the boundary. The response follows the pattern instead of staying fixed — the numerical signature of translation equivariance.</p>
+<hr>
+<h2>Question 20 — Equivariance vs. invariance</h2>
+<p><strong>(a)</strong> "Unchanged" means invariance: F(Tx) = F(x), output values identical after the input moves. "Translated" means equivariance: F(Tx) = T F(x), the same pattern shifted by the same amount.</p>
+<p><strong>(b)</strong> No, they are different. Equivariance preserves the transformation in the output; invariance removes it. Convolution is equivariant, not invariant.</p>
+<p><strong>(c)</strong> If the object moves 5 pixels right, the feature moves 5 positions right in the output (stride 1).</p>
+<p><strong>(d)</strong> Equivariance is useful because a detector learned at one location automatically works at every location; no separate weights per position are needed. The output still encodes WHERE the feature is, which localisation tasks need.</p>
+<hr>
+<h2>Question 21 — Pointwise ReLU preserves equivariance</h2>
+<p>G(x) = ReLU(F(x)), with F equivariant.</p>
+<p><strong>(a) "Pointwise":</strong> the nonlinearity is applied independently to each scalar element/location; it mixes no information across spatial positions.</p>
+<p><strong>(b) Show ReLU(T_d z) = T_d ReLU(z):</strong></p>
+<pre><code>
+[ReLU(T_d z)]_i = max(0, (T_d z)_i)
+                = max(0, z_(i-d))
+                = [ReLU(z)]_(i-d)
+                = [T_d ReLU(z)]_i
+</code></pre>
+<p><strong>(c) G remains equivariant:</strong></p>
+<pre><code>
+G(T_d x) = ReLU(F(T_d x))
+         = ReLU(T_d F(x))
+         = T_d ReLU(F(x))
+         = T_d G(x)
+</code></pre>
+<p><strong>(d) Other activations?</strong> Yes. Any pointwise activation sigma satisfies sigma(T_d z) = T_d sigma(z) by the same index argument: sigmoid, tanh, leaky ReLU, GELU, absolute value, etc.</p>
+<p><strong>(e) Why same operation everywhere matters:</strong> position dependence would break the symmetry, because a shift would no longer commute with the map. Uniform, position-independent operations preserve spatial structure and equivariance, and allow weight sharing.</p>
+<hr>
+<h2>Question 22 — Finite images and boundary effects</h2>
+<p><strong>(a)</strong> A finite image occupies a bounded grid. Shifting it moves pixels off one edge (lost) and leaves a gap at the other (must be filled), so the shifted image is not a pure shifted copy near the border.</p>
+<p><strong>(b)</strong> Zero padding fills the gap with artificial zeros. Near the border, filter windows include these zeros, so responses there use a different (partly fabricated) signal. Shifting changes border responses in a way that is not a pure translation.</p>
+<p><strong>(c)</strong> Far from the border every filter window lies fully inside the image, no padding is involved, and the shift merely reindexes the same values. The equivariance proof applies exactly.</p>
+<p><strong>(d)</strong> Exact equivariance is a property of the operation on an infinite or periodic domain. On finite images it is true only in the interior, so "ignoring boundary effects" flags that border/padding exceptions are being set aside.</p>
+<hr>
+<h2>Question 23 — Stride 2</h2>
+<p><strong>(a)</strong> Stride 2 means the filter moves 2 pixels between consecutive output positions, so outputs are computed on every second location. This downsamples the output grid by 2 per direction.</p>
+<p><strong>(b)</strong> Input shifted by exactly 1 pixel — must the output shift by 1 output position? No. With stride 2 the output exists only on a grid of spacing 2. A 1-pixel shift changes which input positions are sampled; there may be no corresponding output position. The output is generally not a one-position translation.</p>
+<p><strong>(c)</strong> Why subsampling destroys exact equivariance to 1-pixel shifts: strided sampling discards half the positions (aliasing). A 1-pixel shift can move a feature from an even to an odd index, off the sampling lattice, so the response changes qualitatively instead of shifting. F is not a bijection on positions, so F(Tx) != T F(x) in general.</p>
+<p><strong>(d)</strong> Input shifted by 2 pixels (ignoring boundaries): since the sampling grid has spacing 2, a 2-pixel shift is exactly one output position, so the output translates by one position. Equivariance is restored.</p>
+<p><strong>(e) Contrast:</strong></p>
+<pre><code>
+Stride 1: equivariant to any 1-pixel shift (interior), full resolution, exact.
+Stride 2: NOT equivariant to 1-pixel shifts (aliasing); equivariant to shifts that are
+          multiples of 2; halved resolution; approximate/shift-selective.
+</code></pre>
+<hr>
+<h2>Question 24 — 2 x 2 max pooling, stride 2</h2>
+<p>Given:</p>
+<pre><code>
+      [ 1  3  2  0 ]
+X  =  [ 4  6  1  2 ]
+      [ 0  2  5  3 ]
+      [ 1  1  2  4 ]
+</code></pre>
+<p><strong>(a) Four windows (non-overlapping):</strong></p>
+<pre><code>
+W11 = [ 1  3 ]    W12 = [ 2  0 ]
+      [ 4  6 ]          [ 1  2 ]
+
+W21 = [ 0  2 ]    W22 = [ 5  3 ]
+      [ 1  1 ]          [ 2  4 ]
+</code></pre>
+<p><strong>(b) Maximum of each:</strong> 6, 2, 2, 5.</p>
+<p><strong>(c) Pooled output:</strong></p>
+<pre><code>
+      [ 6  2 ]
+Y  =  [ 2  5 ]
+</code></pre>
+<p><strong>(d) Shape:</strong> 2 x 2 (4 / 2 = 2 per side).</p>
+<p><strong>(e) Trainable parameters:</strong> 0. Max pooling has no learnable weights.</p>
+<hr>
+<h2>Question 25 — 2 x 2 average pooling, stride 2 (same X)</h2>
+<p><strong>(a) Averages:</strong></p>
+<pre><code>
+W11: (1+3+4+6)/4 = 14/4 = 3.5
+W12: (2+0+1+2)/4 =  5/4 = 1.25
+W21: (0+2+1+1)/4 =  4/4 = 1.0
+W22: (5+3+2+4)/4 = 14/4 = 3.5
+</code></pre>
+<p><strong>(b) Complete pooled output:</strong></p>
+<pre><code>
+      [ 3.5  1.25 ]
+Y  =  [ 1.0  3.5  ]
+</code></pre>
+<p><strong>(c) Comparison:</strong> max pooling keeps only the strongest activation per region and discards the rest; average pooling keeps the mean activation per region. Max output is peakier and more robust to a strong feature shifting within a window; average output is smoother and reflects the overall level.</p>
+<p><strong>(d) Preserves strongest activation:</strong> max pooling.</p>
+<p><strong>(e) Summarises overall activation level:</strong> average pooling.</p>
+<hr>
+<h2>Question 26 — Pooling a 28 x 28 map twice</h2>
+<p><strong>(a)</strong> After first 2x2 stride-2 pool: 28/2 = 14 -&gt; 14 x 14. <strong>(b)</strong> After second: 14/2 = 7 -&gt; 7 x 7. <strong>(c)</strong> Initial spatial values: 28 * 28 = 784. <strong>(d)</strong> After first: 14 * 14 = 196. <strong>(e)</strong> After second: 7 * 7 = 49. <strong>(f)</strong> Decrease factor: 784 / 49 = 16 (each side shrinks by 4, area by 16).</p>
+<hr>
+<h2>Question 27 — 1-D max pooling, window 2, stride 2</h2>
+<p>Given x = (1, 5, 2, 4, 3, 6).</p>
+<p><strong>(a) Pooled output:</strong></p>
+<pre><code>
+max(1,5)=5, max(2,4)=4, max(3,6)=6  -&gt;  (5, 4, 6)
+</code></pre>
+<p><strong>(b) Translate x one position right</strong> (zero fill at front):</p>
+<pre><code>
+T x = (0, 1, 5, 2, 4, 3)
+max(0,1)=1, max(5,2)=5, max(4,3)=4  -&gt;  (1, 5, 4)
+</code></pre>
+<p><strong>(c) Is the second result a simple translation of the first?</strong> No. (1, 5, 4) is not a shifted copy of (5, 4, 6). The pooling windows pair different inputs after the shift.</p>
+<p><strong>(d) Conclusion:</strong> strided max pooling is not exactly translation equivariant to 1-pixel shifts. It is equivariant only to shifts that are multiples of the stride (here, even shifts), and even then only away from boundaries.</p>
+<p><strong>(e) Why pooling still helps:</strong> if a feature shifts a little WITHIN a window, the maximum (or average) of that window changes little or not at all. Many-to-one summarisation gives local insensitivity / approximate invariance to small shifts.</p>
+<hr>
+<h2>Question 28 — "Max pooling makes a CNN perfectly translation invariant"</h2>
+<p><strong>(a) Translation invariance would mean:</strong> F(T_d x) = F(x) for all translations. The output is IDENTICAL no matter where the content is, not merely shifted.</p>
+<p><strong>(b) Why the statement is too strong:</strong></p>
+<ul>
+<li>Pooling is local: it pools within fixed windows, so a shift that moves a feature across a</li>
+</ul>
+<p>window boundary or into another window changes the output.</p>
+<ul>
+<li>It is strided: outputs live on a coarse grid, so arbitrary shifts do not map cleanly.</li>
+<li>Boundary effects break symmetry at the edges.</li>
+<li>Only partial, local position information is removed. The network is not perfectly invariant.</li>
+</ul>
+<p><strong>(c) The correct weaker idea (local insensitivity):</strong> within a pooling window, small translations produce the same or nearly the same pooled value, because max/mean are translation-tolerant summaries. So pooling gives local, approximate robustness, not exact global invariance.</p>
+<p><strong>(d) Contrast with stride-1 convolution:</strong> a stride-1 convolution is equivariant — the output moves with the input and still encodes position. Pooling is many-to-one and discards position, giving partial invariance. Equivariance preserves the transformation; invariance removes it.</p>
+<hr>
+<h2>Question 29 — Inner-product view Y(i,j) = &lt;P(i,j), K&gt;</h2>
+<p><strong>(a) P(i,j)(X):</strong> the local k x k patch of the image at location (i,j) — the k^2 pixel values the filter covers there, flattened into a vector for the inner product.</p>
+<p><strong>(b) What the inner product measures:</strong> the sum of elementwise products sum_(a,b) K(a,b) * X(i+a-1, j+b-1). It is an unnormalised similarity/projection: large and positive when the patch aligns with positive coefficients and negative when it aligns with negative ones. By Cauchy-Schwarz it is maximised when the patch is proportional to the filter.</p>
+<p><strong>(c) Why similar patches give a large response:</strong> if the patch matches the template, positive coefficients multiply positive pixels and negative coefficients multiply low pixels, so all terms add constructively. Mismatched patches cancel.</p>
+<p><strong>(d) Why the same K everywhere:</strong> weight sharing. One template is reused at every location. This reduces parameters and, because the operation is position-independent, a feature learned at one location is detected identically everywhere -&gt; translation equivariance.</p>
+<p><strong>(e) Connection between local detection and sharing:</strong> the filter is a local template; the inner product at each position measures how strongly that template occurs, producing a feature/ detection map. Sharing the template across positions turns detection into a convolution: one learned local detector scanned over the whole image.</p>
+<hr>
+<h2>Question 30 — Interpreting two filters</h2>
+<p>Given:</p>
+<pre><code>
+      [  1   0  -1 ]            [  1   1   1 ]
+K1 =  [  1   0  -1 ]      K2 =  [  0   0   0 ]
+      [  1   0  -1 ]            [ -1  -1  -1 ]
+</code></pre>
+<p><strong>(a) K1:</strong> coefficients vary across columns (left +1, right -1, middle 0), constant down rows. It computes a horizontal derivative and responds strongly to VERTICAL edges (a left-to-right intensity change). Bright-left/dark-right gives positive; dark-left/bright-right gives negative.</p>
+<p><strong>(b) K2:</strong> coefficients vary across rows (top +1, bottom -1, middle 0), constant across columns. It computes a vertical derivative and responds to HORIZONTAL edges (a top-to-bottom intensity change). Bright-above/dark-below gives positive; reversed gives negative.</p>
+<p><strong>(c) Constant patch:</strong> for a patch of constant value c, the response is c * (sum of coefficients) = c * 0 = 0 for both filters. Constant regions give zero response, so uniform brightness is ignored.</p>
+<p><strong>(d) Why signed coefficients detect changes, not brightness:</strong> positive and negative weights cancel the DC (mean brightness) component. The response depends only on differences between neighbouring pixels — local contrast, edges, gradients — not absolute intensity.</p>
+<p><strong>(e) Why this is a property of THESE filters, not convolution:</strong> convolution is a generic operation; what it detects is determined entirely by the coefficients. An all-positive filter responds to brightness; another filter may detect corners or textures. "Edge detector" is a property of K1 and K2, not of convolution itself.</p>
+<hr>
+<h2>Question 31 — RGB patch 3 x 3 x 3</h2>
+<p><strong>(a) Scalar entries in the patch:</strong> 3 * 3 * 3 = 27.</p>
+<p><strong>(b) Weights in the filter:</strong> 3 * 3 * 3 = 27.</p>
+<p><strong>(c) How one scalar output is obtained:</strong> multiply the 27 patch values by the 27 corresponding filter weights channel-wise and spatially, sum all 27 products, add a bias:</p>
+<pre><code>
+y = sum over c=1..3, a=1..3, b=1..3 of K(a,b,c) * X(a,b,c) + bias
+</code></pre>
+<p><strong>(d) With bias:</strong> 27 + 1 = 28 trainable parameters.</p>
+<p><strong>(e) Applied at 1000 locations — 1000 different weight sets?</strong> No. The same 27 weights are reused at all 1000 locations. There are 1000 outputs but one parameter set: weight sharing.</p>
+<hr>
+<h2>Question 32 — General multi-channel map parameter count</h2>
+<p>Input X in R^(H x W x C_in), output Y in R^(H' x W' x C_out). Each output channel uses one k x k x C_in filter.</p>
+<p><strong>(a) Number of filters:</strong> C_out.</p>
+<p><strong>(b) Total filter weights:</strong> k^2 * C_in * C_out.</p>
+<p><strong>(c) Total biases:</strong> C_out (one per output channel).</p>
+<p><strong>(d) Total parameters:</strong> k^2 * C_in * C_out + C_out = C_out * (k^2 * C_in + 1).</p>
+<p><strong>(e) Why H and W do not appear:</strong> parameters describe the filter, not the number of times it is applied. H and W determine the output grid size and computational cost, but the same shared weights are used at every position. Parameter count is independent of spatial resolution.</p>
+<p><strong>(f) k = 3, C_in = 8, C_out = 16:</strong></p>
+<pre><code>
+9 * 8 * 16 + 16 = 1152 + 16 = 1168
+</code></pre>
+<hr>
+<h2>Question 33 — Dense (A) vs. shared 3x3 same-padding (B), 28 x 28</h2>
+<p><strong>(a) Flattened input dimension:</strong> 28 * 28 = 784.</p>
+<p><strong>(b) Flattened output dimension (one scalar per input pixel):</strong> 784.</p>
+<p><strong>(c) Weights for dense A:</strong> 784 * 784 = 614,656.</p>
+<p><strong>(d) Weights for shared B:</strong> 9.</p>
+<p><strong>(e) With biases:</strong></p>
+<pre><code>
+A: 614,656 weights + 784 biases = 615,440
+B: 9 weights + 1 bias = 10
+</code></pre>
+<p>Ratio with biases: 615,440 / 10 = 61,544.</p>
+<p><strong>(f) Which assumes locality:</strong> B (each output reads only a 3x3 neighbourhood).</p>
+<p><strong>(g) Which shares parameters:</strong> B (same 9 weights at every position).</p>
+<p><strong>(h) Which is naturally translation equivariant (ignoring boundaries):</strong> B, the shared stride-1 convolution. A dense map has position-specific weights and no reason to be equivariant.</p>
+<hr>
+<h2>Question 34 — 64 x 64 image (4096 pixels)</h2>
+<p><strong>(a) Unrestricted dense linear map weights:</strong> 4096 * 4096 = 16,777,216 (about 1.68 x 10^7).</p>
+<p><strong>(b) One shared 5 x 5 filter weights:</strong> 25.</p>
+<p><strong>(c) Ratio:</strong> 16,777,216 / 25 = 671,088.64 (about 6.71 x 10^5).</p>
+<p><strong>(d) Dense multiply-add contributions:</strong> about 4096 * 4096 = 16.8 million.</p>
+<p><strong>(e) Convolutional multiply-adds (ignoring boundary):</strong> about 4096 * 25 = 102,400.</p>
+<p><strong>(f) Why both sparsity and sharing matter:</strong></p>
+<ul>
+<li>Sparsity of connections (locality): each output touches only 25 of 4096 inputs instead of all</li>
+</ul>
+<p>4096, so compute drops from O(N^2) to O(N k^2) — 102,400 vs. 16.8 million.</p>
+<ul>
+<li>Parameter sharing: the same 25 weights serve all 4096 outputs, so model size drops from about</li>
+</ul>
+<p>17 million to 25, independent of image size. Locality saves compute; sharing saves parameters (and gives equivariance). They are separate.</p>
+<hr>
+<h2>Question 35 — True or false, with reasons</h2>
+<p><strong>(a) "Convolution and cross-correlation always produce the same numerical output."</strong> FALSE. They coincide only for filters symmetric under reversal, e.g. length-1 or (a, b, a). Otherwise the flip changes the result (see Q2).</p>
+<p><strong>(b) "A convolutional filter uses different weights at every image location."</strong> FALSE. Weight sharing means the SAME weights are used at every location.</p>
+<p><strong>(c) "Increasing image size necessarily increases the number of coefficients in a fixed filter."</strong> FALSE. Coefficients depend only on k (and channel counts). Only the number of applications grows.</p>
+<p><strong>(d) "A 3x3 convolutional output depends directly only on a local neighbourhood."</strong> TRUE. It depends on exactly the 9 pixels of the patch (local connectivity).</p>
+<p><strong>(e) "A stride-1 convolutional map is translation equivariant away from boundary effects."</strong> TRUE. Q18 proves F(Tx) = T F(x) in the interior.</p>
+<p><strong>(f) "Translation equivariance means translating the input leaves the output unchanged."</strong> FALSE. That is invariance. Equivariance means the output is translated with the input.</p>
+<p><strong>(g) "Max pooling contains trainable weights."</strong> FALSE. Max pooling has zero parameters.</p>
+<p><strong>(h) "Pooling generally reduces spatial resolution when its stride exceeds one."</strong> TRUE. A 2x2 stride-2 pool halves each spatial dimension.</p>
+<p><strong>(i) "A convolutional map can use dramatically fewer parameters than an unrestricted dense map."</strong> TRUE. Q33: 10 vs. 615,440.</p>
+<p><strong>(j) "Weight sharing is closely connected with translation equivariance."</strong> TRUE. Sharing the same position-independent filter is exactly what makes a shift of the input equal a shift of the output.</p>
+<hr>
+<h2>Question 36 — Identify the concept(s)</h2>
+<p>Core concepts: local connectivity, weight sharing, translation equivariance, pooling.</p>
+<p><strong>(a) Same edge detector used top-left and bottom-right:</strong> weight sharing; also yields translation equivariance.</p>
+<p><strong>(b) An output unit examines only a 3x3 neighbourhood:</strong> local connectivity.</p>
+<p><strong>(c) A detected feature moves when the object moves:</strong> translation equivariance.</p>
+<p><strong>(d) A 28x28 feature map reduced to 14x14:</strong> pooling (with stride 2).</p>
+<p><strong>(e) Far fewer parameters than a dense map:</strong> local connectivity + weight sharing (both).</p>
+<p><strong>(f) Nearby strong activations summarised by one value:</strong> pooling (max pooling).</p>
+<hr>
+<h2>Question 37 — Pipeline on a 32 x 32 input</h2>
+<p>Operations: 3x3 convolution, stride 1, padding 1 -&gt; ReLU -&gt; 2x2 max pooling, stride 2. One convolutional output channel.</p>
+<p><strong>(a) Shape after convolution:</strong></p>
+<pre><code>
+H' = (32 + 2*1 - 3)/1 + 1 = 32,  W' = 32  -&gt;  32 x 32 x 1
+</code></pre>
+<p>(Same padding: output equals input spatial size.)</p>
+<p><strong>(b) Shape after ReLU:</strong> unchanged, 32 x 32 x 1 (pointwise).</p>
+<p><strong>(c) Shape after max pooling:</strong></p>
+<pre><code>
+(32 - 2)/2 + 1 = 16  -&gt;  16 x 16 x 1
+</code></pre>
+<p><strong>(d) Conv trainable parameters:</strong> k^2*C_in*C_out + C_out = 9*1*1 + 1 = 10 (9 weights + 1 bias).</p>
+<p><strong>(e) ReLU parameters:</strong> 0.</p>
+<p><strong>(f) Max pooling parameters:</strong> 0.</p>
+<p><strong>(g) Local weighted feature extraction:</strong> convolution.</p>
+<p><strong>(h) Pointwise operation:</strong> ReLU.</p>
+<p><strong>(i) Reduces spatial resolution:</strong> max pooling (stride 2).</p>
+<p><strong>(j) Can affect exact equivariance through subsampling:</strong> max pooling (stride 2). The convolution itself has stride 1 and is equivariant.</p>
+<hr>
+<h2>Question 38 — Conceptual synthesis: dense vs. convolutional</h2>
+<p><strong>(a) Prior encoded by local connectivity:</strong> relevant image structure is local. An output at a location depends mainly on nearby pixels; distant pixels matter less. Neighbouring pixels are statistically correlated (smoothness/Markov structure of natural images).</p>
+<p><strong>(b) Prior encoded by sharing a filter:</strong> image statistics are stationary / translation invariant. The same pattern (edge, texture, object part) can occur anywhere, so the same detector should apply everywhere. The detection rule does not depend on absolute position.</p>
+<p><strong>(c) How locality reduces computation:</strong> each output uses k^2 inputs instead of all N, so cost per output is constant and total cost is O(k^2 N) instead of O(N^2): linear vs. quadratic.</p>
+<p><strong>(d) How sharing reduces parameters:</strong> one filter (O(k^2) coefficients) is reused at all locations, so parameter count is independent of N (9 or 25 vs. millions).</p>
+<p><strong>(e) How sharing leads to equivariance:</strong> because the same weights apply at every position, shifting the input is absorbed by shifting the summation index, so F(Tx) = T F(x) (Q18). The response moves with the feature.</p>
+<p><strong>(f) What pooling loses:</strong> exact spatial position/localisation and fine detail. Many inputs map to one output, so precise coordinates and small distinctions within a window are discarded.</p>
+<p><strong>(g) Why that loss is useful:</strong> it gives robustness to small shifts, noise and nuisance variations, reduces spatial resolution and computation, and increases the effective receptive field so later layers see larger context. It trades localisation precision for invariance and efficiency.</p>
+<p><strong>(h) When a dense map could represent something a shared convolution cannot:</strong> when behaviour must be position-dependent (spatially varying) — different processing in different image regions (foveation, fixed spatial attention, position-specific templates, or a learned positional bias per pixel). A single shared filter applies identical weights everywhere, so it cannot encode "do X in the top-left and Y in the bottom-right".</p>
+<p><strong>(i) Fundamental reason convolutions suit images:</strong> images have two structural symmetries — locality (nearby pixels interact) and stationarity (patterns look the same wherever they occur). A convolution encodes exactly these priors: local receptive fields plus shared weights. This gives large parameter and compute savings, translation equivariance, and good generalisation, which is why convolutional maps are the natural inductive bias for images.</p>
+<hr>
+<h1>Part 3 — Formula Card, Pitfalls, Self-Test</h1>
+<h2>3.1 Formula card</h2>
+<pre><code>
+1-D valid output            : n - k + 1
+1-D general output          : floor((n + 2p - k)/s) + 1
+2-D general output          : floor((H + 2p_h - k_h)/s_h) + 1
+                              x floor((W + 2p_w - k_w)/s_w) + 1
+Same padding (stride 1)     : p = (k - 1)/2
+Conv weights (1 out chan)   : k^2 * C_in
+Conv total params           : k^2 * C_in * C_out + C_out
+Dense params (d -&gt; m)       : m*d + m
+Conv multiplications        : k^2 (H-k+1)(W-k+1)
+Dense multiplications (N-&gt;N): N^2
+Cost ratio conv vs dense    : N / k^2  (dense is N/k^2 times more expensive)
+Receptive field             : 1 + L(k - 1); for 3x3: 2L + 1
+Pooling output              : floor((n - k)/s) + 1; 2x2 stride 2 halves each side
+Max/average pooling params  : 0
+Conv vs correlation         : conv = correlation with reversed kernel
+</code></pre>
+<h2>3.2 Equivariance in one line</h2>
+<pre><code>
+Equivariance: F(T_d x) = T_d F(x)     output moves with input
+Invariance:   F(T_d x) = F(x)         output unchanged
+
+Conv + pointwise nonlinearity  = equivariant.
+Strided conv/pooling           = equivariant only to multiples of the stride, interior only.
+Pooling                        = local, approximate invariance.
+</code></pre>
+<h2>3.3 Self-test (answers in brackets)</h2>
+<ol>
+<li>Input length 20, filter 4, stride 2, padding 0 -&gt; output length? (9)</li>
+<li>32x32, 3x3 conv, 4 in-channels, 8 out-channels -&gt; params? (9*4*8 + 8 = 296)</li>
+<li>Same conv at all 1024 positions -&gt; how many distinct weight sets? (1)</li>
+<li>Two 3x3 stride-1 convs -&gt; RF? (5). Five -&gt; (11).</li>
+<li>Is a stride-1 conv translation invariant? (No — equivariant)</li>
+<li>2x2 stride-2 max pool on 28x28 -&gt; shape? (14x14)</li>
+<li>Dense 784-&gt;784 weights? (614,656). Shared 3x3 weights? (9)</li>
+<li>Conv vs. xcorr for k = (2, -1, 2)? (equal — palindromic)</li>
+<li>Zero-sum filter on a constant patch -&gt; response? (0)</li>
+<li>N = 10^6, k = 3: conv is how many times cheaper than dense? (about 1.11 x 10^5)</li>
+</ol>
+<hr>
+<p>All numerical results above were independently verified by direct computation.</p>
+</main>
+</body>
+</html>
